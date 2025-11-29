@@ -12,7 +12,7 @@
             min-height: 100vh; padding: 20px;
         }
         .container { 
-            max-width: 900px; 
+            max-width: 1000px; 
             margin: 0 auto; 
             background: white; 
             border-radius: 20px; 
@@ -41,35 +41,28 @@
             margin-top: 30px; padding: 30px; background: #f8f9fa; 
             border-radius: 15px; display: none;
         }
-        .result h3 { color: #333; margin-bottom: 15px; }
-        #headerText, #downloadLink { 
-            background: white; padding: 20px; border-radius: 10px; 
-            font-family: 'Courier New', monospace; margin: 15px 0;
-            word-break: break-all; border-left: 5px solid #4CAF50;
+        #debugHtml { 
+            width: 100%; height: 400px; font-family: monospace; 
+            font-size: 12px; border: 1px solid #ddd; border-radius: 8px; 
+            padding: 10px; margin-top: 20px; background: #f5f5f5;
         }
-        #downloadBtn { 
-            display: inline-block; padding: 20px 50px; background: #FF6B6B; 
-            color: white; text-decoration: none; border-radius: 12px; 
-            font-weight: bold; font-size: 18px; margin-top: 20px;
+        .copypaste { 
+            background: #fff3cd; padding: 20px; border-radius: 10px; 
+            margin: 20px 0; border-left: 5px solid #ffc107;
         }
-        #downloadBtn:hover { background: #FF5252; }
         .status { 
             padding: 15px; margin: 20px 0; border-radius: 10px; 
             font-weight: 500; text-align: center;
         }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
-        .copypaste { 
-            background: #fff3cd; padding: 20px; border-radius: 10px; 
-            margin: 20px 0; border-left: 5px solid #ffc107;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🖼️ Яндекс Архив → Изображение</h1>
-            <p>Вставьте ссылку → Получите прямую ссылку на оригинал</p>
+            <h1>🖼️ Яндекс Архив Парсер (DEBUG)</h1>
+            <p>Вставьте ссылку → Скопируйте HTML → Получите изображение</p>
         </div>
         
         <div class="content">
@@ -77,14 +70,19 @@
             
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button onclick="pasteFromClipboard()">📋 Из буфера</button>
-                <button onclick="loadPage()">🚀 Загрузить</button>
-                <button onclick="clearAll()">🗑️ Очистить</button>
+                <button onclick="loadPage()">🔍 Загрузить (проверить)</button>
+                <button onclick="showCopyPaste()">📋 Копи-паст метод</button>
             </div>
             
-            <div class="copypaste">
-                <strong>❌ Не работает? Ctrl+A → Ctrl+C → Вставьте HTML сюда:</strong><br>
-                <textarea id="htmlInput" placeholder="HTML-код страницы (альтернативный метод)" style="width:100%; height:150px; margin-top:10px; display:none;"></textarea>
-                <button onclick="parseHtmlInput()" style="margin-top:10px; padding:12px 24px; background:#2196F3;">🔍 Парсить HTML</button>
+            <div id="debugSection" style="display:none;">
+                <h3>🐛 Полученный HTML (первые 5000 символов):</h3>
+                <textarea id="debugHtml" readonly></textarea>
+            </div>
+            
+            <div class="copypaste" id="copypasteSection" style="display:none;">
+                <strong>📋 МЕТОД 2: Вставьте HTML страницы:</strong><br>
+                <textarea id="htmlInput" placeholder="Ctrl+A → Ctrl+C на странице Яндекса → Ctrl+V сюда" style="width:100%; height:200px;"></textarea>
+                <button onclick="parseHtmlInput()" style="margin-top:10px;">🔍 ПАРСИТЬ HTML</button>
             </div>
             
             <div id="status" class="status" style="display:none;"></div>
@@ -114,53 +112,80 @@
             const url = document.getElementById('urlInput').value.trim();
             if (!url) return showStatus('Введите ссылку!', 'error');
             
-            const btn = event.target;
-            btn.disabled = true;
-            btn.textContent = '⏳ Загружаем...';
-            showStatus('🔄 Загружаем страницу через прокси...', 'success');
+            showStatus('🔄 Загружаем через прокси...', 'success');
+            document.getElementById('debugSection').style.display = 'block';
             
             try {
                 const proxyUrl = `./proxy.php?url=${encodeURIComponent(url)}`;
                 const response = await fetch(proxyUrl);
-                
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
                 const html = await response.text();
-                parseHtml(html);
-                showStatus('✅ Готово!', 'success');
+                
+                document.getElementById('debugHtml').value = html.substring(0, 5000);
+                
+                // Пробуем разные варианты парсинга
+                parseHtmlAdvanced(html);
                 
             } catch (error) {
-                showStatus(`❌ Ошибка: ${error.message}. Используйте копи-паст метод.`, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.textContent = '🚀 Загрузить';
+                showStatus(`❌ Ошибка прокси: ${error.message}`, 'error');
+                document.getElementById('debugHtml').value = 'ПРОКСИ НЕ РАБОТАЕТ\nИспользуйте копи-паст метод';
             }
         }
 
-        function parseHtml(html) {
-            // Парсим путь
-            const headerMatch = html.match(/<div class="OneDocumentHeader-Path">([^<]*?)<span/);
-            const headerText = headerMatch ? headerMatch[1].trim() : 'Не найден';
+        function parseHtmlAdvanced(html) {
+            // ВАРИАНТ 1: Оригинальный паттерн
+            let headerMatch = html.match(/<div class="OneDocumentHeader-Path"[^>]*>([^<]*?)</);
+            let headerText = headerMatch ? headerMatch[1].trim() : '❌ Не найден';
             
-            // Парсим изображение
-            const imageMatch = html.match(/"originalImagePath":"([^"]*)"/);
+            // ВАРИАНТ 2: JSON данные
+            let jsonMatch = html.match(/window\.__INITIAL_STATE__\s*=\s*({.*?});/s);
             let imageUrl = null;
             
-            if (imageMatch) {
-                imageUrl = imageMatch[1]
-                    .replace(/\\u0026/g, '&')
-                    .replace(/\\\\/g, '\\');
-                imageUrl = decodeURIComponent(imageUrl);
-                imageUrl = 'https://yandex.ru' + imageUrl;
+            if (jsonMatch) {
+                try {
+                    const jsonData = JSON.parse(jsonMatch[1]);
+                    // Ищем originalImagePath в JSON
+                    imageUrl = findImagePath(jsonData);
+                } catch(e) {}
+            }
+            
+            // ВАРИАНТ 3: Строка в HTML
+            if (!imageUrl) {
+                const imageMatch = html.match(/"originalImagePath"["']?\s*:\s*["']([^"']+)["']/);
+                if (imageMatch) {
+                    imageUrl = imageMatch[1]
+                        .replace(/\\u0026/g, '&')
+                        .replace(/\\\\/g, '\\');
+                    imageUrl = decodeURIComponent(imageUrl);
+                    imageUrl = 'https://yandex.ru' + imageUrl;
+                }
             }
             
             showResults(headerText, imageUrl);
+            showStatus('🔍 Проверьте HTML выше. Если пусто → используйте копи-паст', 'success');
+        }
+
+        function findImagePath(obj) {
+            if (!obj || typeof obj !== 'object') return null;
+            
+            for (let key in obj) {
+                if (typeof obj[key] === 'string' && obj[key].includes('originalImagePath')) {
+                    const match = obj[key].match(/"originalImagePath":"([^"]*)"/);
+                    if (match) {
+                        return 'https://yandex.ru' + decodeURIComponent(match[1].replace(/\\u0026/g, '&'));
+                    }
+                }
+                if (typeof obj[key] === 'object') {
+                    const result = findImagePath(obj[key]);
+                    if (result) return result;
+                }
+            }
+            return null;
         }
 
         function parseHtmlInput() {
             const html = document.getElementById('htmlInput').value;
             if (!html) return showStatus('Вставьте HTML!', 'error');
-            parseHtml(html);
+            parseHtmlAdvanced(html);
             showStatus('✅ HTML спарсен!', 'success');
         }
 
@@ -186,17 +211,19 @@
             status.style.display = 'block';
         }
 
+        function showCopyPaste() {
+            document.getElementById('copypasteSection').style.display = 'block';
+            document.getElementById('copypasteSection').scrollIntoView();
+        }
+
         function clearAll() {
             document.getElementById('urlInput').value = '';
             document.getElementById('htmlInput').value = '';
+            document.getElementById('debugHtml').value = '';
             document.getElementById('result').style.display = 'none';
             document.getElementById('status').style.display = 'none';
+            document.getElementById('debugSection').style.display = 'none';
         }
-
-        // Enter для загрузки
-        document.getElementById('urlInput').addEventListener('keypress', e => {
-            if (e.key === 'Enter') loadPage();
-        });
     </script>
 </body>
 </html>
