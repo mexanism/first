@@ -1,4 +1,202 @@
-<html>
-<h2>first</h2>
-<p>project
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🖼️ Яндекс Архив Парсер</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; padding: 20px;
+        }
+        .container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 20px; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header { 
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); 
+            color: white; 
+            padding: 30px; 
+            text-align: center;
+        }
+        .content { padding: 40px; }
+        input { 
+            width: 100%; padding: 18px; font-size: 16px; border: 2px solid #e0e0e0; 
+            border-radius: 12px; margin-bottom: 20px;
+        }
+        button { 
+            padding: 18px 40px; font-size: 18px; background: #4CAF50; 
+            color: white; border: none; border-radius: 12px; cursor: pointer; 
+            margin: 10px; font-weight: 600; transition: all 0.3s;
+        }
+        button:hover { background: #45a049; transform: translateY(-2px); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .result { 
+            margin-top: 30px; padding: 30px; background: #f8f9fa; 
+            border-radius: 15px; display: none;
+        }
+        .result h3 { color: #333; margin-bottom: 15px; }
+        #headerText, #downloadLink { 
+            background: white; padding: 20px; border-radius: 10px; 
+            font-family: 'Courier New', monospace; margin: 15px 0;
+            word-break: break-all; border-left: 5px solid #4CAF50;
+        }
+        #downloadBtn { 
+            display: inline-block; padding: 20px 50px; background: #FF6B6B; 
+            color: white; text-decoration: none; border-radius: 12px; 
+            font-weight: bold; font-size: 18px; margin-top: 20px;
+        }
+        #downloadBtn:hover { background: #FF5252; }
+        .status { 
+            padding: 15px; margin: 20px 0; border-radius: 10px; 
+            font-weight: 500; text-align: center;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .copypaste { 
+            background: #fff3cd; padding: 20px; border-radius: 10px; 
+            margin: 20px 0; border-left: 5px solid #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🖼️ Яндекс Архив → Изображение</h1>
+            <p>Вставьте ссылку → Получите прямую ссылку на оригинал</p>
+        </div>
+        
+        <div class="content">
+            <input type="url" id="urlInput" placeholder="https://yandex.ru/archive/catalog/9c50435a-f887-4349-b44a-6ea80e326f2c/122">
+            
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button onclick="pasteFromClipboard()">📋 Из буфера</button>
+                <button onclick="loadPage()">🚀 Загрузить</button>
+                <button onclick="clearAll()">🗑️ Очистить</button>
+            </div>
+            
+            <div class="copypaste">
+                <strong>❌ Не работает? Ctrl+A → Ctrl+C → Вставьте HTML сюда:</strong><br>
+                <textarea id="htmlInput" placeholder="HTML-код страницы (альтернативный метод)" style="width:100%; height:150px; margin-top:10px; display:none;"></textarea>
+                <button onclick="parseHtmlInput()" style="margin-top:10px; padding:12px 24px; background:#2196F3;">🔍 Парсить HTML</button>
+            </div>
+            
+            <div id="status" class="status" style="display:none;"></div>
+            
+            <div id="result" class="result">
+                <h3>📄 Путь документа:</h3>
+                <div id="headerText">-</div>
+                <h3>🖼️ Прямая ссылка:</h3>
+                <div id="downloadLink">-</div>
+                <a id="downloadBtn" href="#">⬇️ СКАЧАТЬ ОРИГИНАЛ</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function pasteFromClipboard() {
+            try {
+                const text = await navigator.clipboard.readText();
+                document.getElementById('urlInput').value = text.trim();
+                showStatus('✅ Ссылка вставлена!', 'success');
+            } catch(e) {
+                showStatus('Вставьте вручную', 'error');
+            }
+        }
+
+        async function loadPage() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) return showStatus('Введите ссылку!', 'error');
+            
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Загружаем...';
+            showStatus('🔄 Загружаем страницу через прокси...', 'success');
+            
+            try {
+                const proxyUrl = `./proxy.php?url=${encodeURIComponent(url)}`;
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                
+                const html = await response.text();
+                parseHtml(html);
+                showStatus('✅ Готово!', 'success');
+                
+            } catch (error) {
+                showStatus(`❌ Ошибка: ${error.message}. Используйте копи-паст метод.`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 Загрузить';
+            }
+        }
+
+        function parseHtml(html) {
+            // Парсим путь
+            const headerMatch = html.match(/<div class="OneDocumentHeader-Path">([^<]*?)<span/);
+            const headerText = headerMatch ? headerMatch[1].trim() : 'Не найден';
+            
+            // Парсим изображение
+            const imageMatch = html.match(/"originalImagePath":"([^"]*)"/);
+            let imageUrl = null;
+            
+            if (imageMatch) {
+                imageUrl = imageMatch[1]
+                    .replace(/\\u0026/g, '&')
+                    .replace(/\\\\/g, '\\');
+                imageUrl = decodeURIComponent(imageUrl);
+                imageUrl = 'https://yandex.ru' + imageUrl;
+            }
+            
+            showResults(headerText, imageUrl);
+        }
+
+        function parseHtmlInput() {
+            const html = document.getElementById('htmlInput').value;
+            if (!html) return showStatus('Вставьте HTML!', 'error');
+            parseHtml(html);
+            showStatus('✅ HTML спарсен!', 'success');
+        }
+
+        function showResults(headerText, imageUrl) {
+            document.getElementById('headerText').textContent = headerText;
+            document.getElementById('downloadLink').textContent = imageUrl || '❌ Не найдено';
+            
+            const downloadBtn = document.getElementById('downloadBtn');
+            if (imageUrl) {
+                downloadBtn.href = imageUrl;
+                downloadBtn.style.display = 'inline-block';
+            } else {
+                downloadBtn.style.display = 'none';
+            }
+            
+            document.getElementById('result').style.display = 'block';
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+        }
+
+        function clearAll() {
+            document.getElementById('urlInput').value = '';
+            document.getElementById('htmlInput').value = '';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('status').style.display = 'none';
+        }
+
+        // Enter для загрузки
+        document.getElementById('urlInput').addEventListener('keypress', e => {
+            if (e.key === 'Enter') loadPage();
+        });
+    </script>
+</body>
 </html>
